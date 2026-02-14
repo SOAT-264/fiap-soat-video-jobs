@@ -16,10 +16,14 @@ from job_service.infrastructure.adapters.output.persistence.repositories.sqlalch
 )
 from job_service.infrastructure.adapters.output.persistence.database import get_session
 from sqlalchemy.ext.asyncio import AsyncSession
+from job_service.infrastructure.adapters.output.storage import S3StorageAdapter
+from job_service.infrastructure.config import get_settings
 
 from video_processor_shared.domain.exceptions import JobNotFoundError
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
+
+settings = get_settings()
 
 
 def get_job_repository(session: AsyncSession = Depends(get_session)) -> SQLAlchemyJobRepository:
@@ -36,6 +40,13 @@ async def get_job(
     use_case = GetJobUseCase(repository)
     try:
         result = await use_case.execute(job_id, user_id)
+        download_url = None
+        if result.zip_path:
+            storage = S3StorageAdapter()
+            download_url = await storage.generate_presigned_url(
+                bucket=settings.S3_OUTPUT_BUCKET,
+                key=result.zip_path,
+            )
         return JobResponse(
             id=result.id,
             video_id=result.video_id,
@@ -45,6 +56,7 @@ async def get_job(
             frame_count=result.frame_count,
             zip_path=result.zip_path,
             zip_size=result.zip_size,
+            download_url=download_url,
             error_message=result.error_message,
             started_at=result.started_at,
             completed_at=result.completed_at,
@@ -64,13 +76,20 @@ async def list_jobs(
 ) -> JobListResponse:
     """List jobs for a user with pagination."""
     use_case = ListJobsUseCase(repository)
-    result = await use_case.execute(
-        user_id=user_id,
-        status_filter=status_filter,
-        page=page,
-        limit=limit,
-    )
+    try:
+        result = await use_case.execute(
+            user_id=user_id,
+            status_filter=status_filter,
+            page=page,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        )
     
+    storage = S3StorageAdapter()
     jobs = [
         JobResponse(
             id=job.id,
@@ -81,6 +100,10 @@ async def list_jobs(
             frame_count=job.frame_count,
             zip_path=job.zip_path,
             zip_size=job.zip_size,
+            download_url=await storage.generate_presigned_url(
+                bucket=settings.S3_OUTPUT_BUCKET,
+                key=job.zip_path,
+            ) if job.zip_path else None,
             error_message=job.error_message,
             started_at=job.started_at,
             completed_at=job.completed_at,

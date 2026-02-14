@@ -16,6 +16,7 @@ class JobResponse(BaseModel):
     frame_count: Optional[int] = None
     zip_path: Optional[str] = None
     zip_size: Optional[int] = None
+    download_url: Optional[str] = None
     error_message: Optional[str] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None

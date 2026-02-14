@@ -1,6 +1,7 @@
 """Create Job Use Case."""
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Optional
 from uuid import UUID, uuid4
 
 from job_service.domain.entities.job import Job
@@ -17,6 +18,12 @@ class JobOutput:
     status: JobStatus
     progress: int
     created_at: datetime
+    frame_count: Optional[int] = None
+    zip_path: Optional[str] = None
+    zip_size: Optional[int] = None
+    error_message: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
 
 class CreateJobUseCase:

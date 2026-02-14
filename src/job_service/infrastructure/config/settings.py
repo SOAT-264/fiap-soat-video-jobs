@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/2"
 
     AWS_ENDPOINT_URL: str = ""
+    PUBLIC_S3_ENDPOINT_URL: str = ""
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""
     AWS_DEFAULT_REGION: str = "us-east-1"

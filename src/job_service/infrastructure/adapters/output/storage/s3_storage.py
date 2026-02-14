@@ -1,5 +1,7 @@
 """S3 Storage adapter for video files."""
 from typing import Optional, BinaryIO
+from urllib.parse import urlparse, urlunparse
+
 import aioboto3
 
 from job_service.infrastructure.config import get_settings
@@ -70,6 +72,19 @@ class S3StorageAdapter:
                 "get_object",
                 Params={"Bucket": bucket, "Key": key},
                 ExpiresIn=expires_in,
+            )
+        if settings.PUBLIC_S3_ENDPOINT_URL:
+            public_parts = urlparse(settings.PUBLIC_S3_ENDPOINT_URL)
+            url_parts = urlparse(url)
+            url = urlunparse(
+                (
+                    public_parts.scheme or url_parts.scheme,
+                    public_parts.netloc,
+                    url_parts.path,
+                    url_parts.params,
+                    url_parts.query,
+                    url_parts.fragment,
+                )
             )
         return url
 
