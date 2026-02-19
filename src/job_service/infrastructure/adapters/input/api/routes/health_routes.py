@@ -1,5 +1,5 @@
 """Health check routes."""
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends
@@ -18,7 +18,7 @@ async def health_check() -> Dict[str, Any]:
     return {
         "status": "healthy",
         "service": "job-service",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
@@ -49,6 +49,6 @@ async def readiness_check(
     return {
         "status": "ready" if all_healthy else "not_ready",
         "service": "job-service",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "services": services,
     }

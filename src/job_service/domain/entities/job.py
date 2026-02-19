@@ -1,5 +1,5 @@
 """Job Entity."""
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Optional
 from uuid import UUID
 
@@ -37,13 +37,13 @@ class Job:
         self.error_message = error_message
         self.started_at = started_at
         self.completed_at = completed_at
-        self.created_at = created_at or datetime.utcnow()
-        self.updated_at = updated_at or datetime.utcnow()
+        self.created_at = created_at or datetime.now(UTC)
+        self.updated_at = updated_at or datetime.now(UTC)
 
     def start(self) -> None:
         self._transition_to(JobStatus.PROCESSING)
-        self.started_at = datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        self.started_at = datetime.now(UTC)
+        self.updated_at = datetime.now(UTC)
 
     def complete(self, frame_count: int, zip_path: str, zip_size: int) -> None:
         self._transition_to(JobStatus.COMPLETED)
@@ -51,25 +51,25 @@ class Job:
         self.zip_path = zip_path
         self.zip_size = zip_size
         self.progress = 100
-        self.completed_at = datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        self.completed_at = datetime.now(UTC)
+        self.updated_at = datetime.now(UTC)
 
     def fail(self, error_message: str) -> None:
         self._transition_to(JobStatus.FAILED)
         self.error_message = error_message
-        self.completed_at = datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        self.completed_at = datetime.now(UTC)
+        self.updated_at = datetime.now(UTC)
 
     def cancel(self) -> None:
         self._transition_to(JobStatus.CANCELLED)
-        self.completed_at = datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        self.completed_at = datetime.now(UTC)
+        self.updated_at = datetime.now(UTC)
 
     def update_progress(self, progress: int) -> None:
         if not 0 <= progress <= 100:
             raise ValueError("Progress must be between 0 and 100")
         self.progress = progress
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(UTC)
 
     def _transition_to(self, new_status: JobStatus) -> None:
         if not self.status.can_transition_to(new_status):
