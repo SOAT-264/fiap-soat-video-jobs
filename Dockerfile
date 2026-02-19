@@ -4,6 +4,7 @@ WORKDIR /app
 
 # Install system dependencies including FFmpeg
 RUN apt-get update && apt-get install -y \
+    curl \
     gcc \
     ffmpeg \
     libsm6 \
