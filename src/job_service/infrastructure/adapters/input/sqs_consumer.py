@@ -61,26 +61,35 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     processed_jobs = []
     failed_jobs = []
     
+    resolved_jobs: list[tuple[str, str]] = []
+
     for record in event.get("Records", []):
         try:
             body = json.loads(record["body"])
-            
+
             # Handle SNS-wrapped messages (SQS subscribed to SNS)
             if "Message" in body:
                 body = json.loads(body["Message"])
-            
+
             job_id, video_key = asyncio.get_event_loop().run_until_complete(
                 _resolve_job_payload(body)
             )
-            asyncio.get_event_loop().run_until_complete(
-                process_video_task(job_id=job_id, video_key=video_key)
-            )
-            
-            processed_jobs.append(job_id)
-            
+            resolved_jobs.append((job_id, video_key))
         except Exception as e:
             failed_jobs.append({
                 "message_id": record.get("messageId"),
+                "error": str(e),
+            })
+
+    for job_id, video_key in resolved_jobs:
+        try:
+            asyncio.get_event_loop().run_until_complete(
+                process_video_task(job_id=job_id, video_key=video_key)
+            )
+            processed_jobs.append(job_id)
+        except Exception as e:
+            failed_jobs.append({
+                "message_id": job_id,
                 "error": str(e),
             })
     
@@ -136,45 +145,60 @@ class SQSJobConsumer:
             try:
                 response = await sqs.receive_message(
                     QueueUrl=self._queue_url,
-                    MaxNumberOfMessages=1,
+                    MaxNumberOfMessages=10,
                     WaitTimeSeconds=20,  # Long polling
                     AttributeNames=["All"],
                     MessageAttributeNames=["All"],
                 )
                 
-                for message in response.get("Messages", []):
-                    await self._process_message(sqs, message)
+                messages = response.get("Messages", [])
+                if not messages:
+                    return
+
+                resolved: list[tuple[str, str, str]] = []
+                for message in messages:
+                    job_id, video_key = await self._resolve_message(message)
+                    if job_id and video_key:
+                        resolved.append((job_id, video_key, message["ReceiptHandle"]))
+
+                for job_id, video_key, receipt_handle in resolved:
+                    await self._process_resolved_job(sqs, job_id, video_key, receipt_handle)
                     
             except Exception as e:
                 print(f"❌ Error polling SQS: {e}", flush=True)
                 await asyncio.sleep(5)
     
-    async def _process_message(self, sqs: Any, message: Dict[str, Any]) -> None:
-        """Process a single message."""
-        receipt_handle = message["ReceiptHandle"]
-        
+    async def _resolve_message(self, message: Dict[str, Any]) -> tuple[str | None, str | None]:
+        """Resolve a message into a job id and S3 key, creating a pending job if needed."""
         try:
             print(f"📥 Received message: {message.get('MessageId')}", flush=True)
             body = json.loads(message["Body"])
-            
+
             # Handle SNS-wrapped messages
             if "Message" in body:
                 body = json.loads(body["Message"])
-            
+
             job_id, video_key = await _resolve_job_payload(body)
-            
+            return job_id, video_key
+        except Exception as e:
+            print(f"❌ Job resolve failed: {e}", flush=True)
+            return None, None
+
+    async def _process_resolved_job(
+        self, sqs: Any, job_id: str, video_key: str, receipt_handle: str
+    ) -> None:
+        """Process a resolved job and delete the message on success."""
+        try:
             print(f"📹 Processing job: {job_id} key={video_key}", flush=True)
-            
+
             await process_video_task(job_id=job_id, video_key=video_key)
-            
-            # Delete message on success
+
             await sqs.delete_message(
                 QueueUrl=self._queue_url,
                 ReceiptHandle=receipt_handle,
             )
-            
+
             print(f"✅ Job completed: {job_id}", flush=True)
-            
         except Exception as e:
             print(f"❌ Job failed: {e}", flush=True)
             # Message will return to queue after visibility timeout
