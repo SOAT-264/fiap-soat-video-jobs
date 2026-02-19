@@ -1,9 +1,10 @@
 """SQLAlchemy Models for Job Service."""
-from datetime import datetime
+from datetime import UTC, datetime
 from uuid import UUID as PyUUID
 
-from sqlalchemy import Column, String, Integer, DateTime, Text, BigInteger, Enum
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Integer, Text, BigInteger, Enum
+from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
+from sqlalchemy.sql import func
 
 from job_service.infrastructure.adapters.output.persistence.database import Base
 from video_processor_shared.domain.value_objects import JobStatus
@@ -28,7 +29,7 @@ class JobModel(Base):
     zip_path = Column(String(500), nullable=True)
     zip_size = Column(BigInteger, nullable=True)
     error_message = Column(Text, nullable=True)
-    started_at = Column(DateTime, nullable=True)
-    completed_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    started_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    completed_at = Column(TIMESTAMP(timezone=True), nullable=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), index=True)
+    updated_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
