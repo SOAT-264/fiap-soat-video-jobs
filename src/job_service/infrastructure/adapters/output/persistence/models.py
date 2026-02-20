@@ -1,6 +1,5 @@
 """SQLAlchemy Models for Job Service."""
-from datetime import UTC, datetime
-from uuid import UUID as PyUUID
+from uuid import UUID
 
 from sqlalchemy import Column, String, Integer, Text, BigInteger, Enum
 from sqlalchemy.dialects.postgresql import UUID, TIMESTAMP
