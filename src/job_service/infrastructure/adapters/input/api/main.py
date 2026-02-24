@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_client import make_asgi_app
 
 from job_service.infrastructure.config import get_settings
 from job_service.infrastructure.adapters.input.api.routes.job_routes import router as job_router
@@ -40,6 +41,7 @@ app.add_middleware(
 # Include routers
 app.include_router(health_router)
 app.include_router(job_router)
+app.mount("/metrics", make_asgi_app())
 
 
 @app.get("/")
