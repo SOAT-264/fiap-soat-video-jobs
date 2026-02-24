@@ -1,3 +1,4 @@
+import asyncio
 import json
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -62,22 +63,28 @@ async def test_resolve_job_payload_creates_job_when_video_event(monkeypatch):
 
 
 def test_lambda_handler_processes_records(monkeypatch):
-    resolved = [("job-1", "videos/a.mp4")]
-    monkeypatch.setattr(sqs_consumer, "_resolve_job_payload", AsyncMock(return_value=resolved[0]))
-    monkeypatch.setattr(sqs_consumer, "process_video_task", AsyncMock())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
+    try:
+        resolved = [("job-1", "videos/a.mp4")]
+        monkeypatch.setattr(sqs_consumer, "_resolve_job_payload", AsyncMock(return_value=resolved[0]))
+        monkeypatch.setattr(sqs_consumer, "process_video_task", AsyncMock())
 
-    event = {
-        "Records": [
-            {"messageId": "1", "body": json.dumps({"job_id": "job-1", "s3_key": "videos/a.mp4"})}
-        ]
-    }
+        event = {
+            "Records": [
+                {"messageId": "1", "body": json.dumps({"job_id": "job-1", "s3_key": "videos/a.mp4"})}
+            ]
+        }
 
-    result = sqs_consumer.lambda_handler(event, None)
-    body = json.loads(result["body"])
+        result = sqs_consumer.lambda_handler(event, None)
+        body = json.loads(result["body"])
 
-    assert result["statusCode"] == 200
-    assert body["processed"] == ["job-1"]
-    assert body["failed"] == []
+        assert result["statusCode"] == 200
+        assert body["processed"] == ["job-1"]
+        assert body["failed"] == []
+    finally:
+        loop.close()
 
 
 @pytest.mark.asyncio
