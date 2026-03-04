@@ -7,6 +7,7 @@ data:
   DATABASE_URL: "postgresql+asyncpg://postgres:postgres123@host.docker.internal:5434/job_db"
   REDIS_URL: "redis://host.docker.internal:6379/2"
   AWS_ENDPOINT_URL: "http://host.docker.internal:4566"
+  PUBLIC_S3_ENDPOINT_URL: "http://aws.localhost"
   SQS_QUEUE_URL: "http://host.docker.internal:4566/000000000000/job-queue"
   SQS_JOB_QUEUE_URL: "http://host.docker.internal:4566/000000000000/job-queue"
   AUTH_SERVICE_URL: "http://host.docker.internal:8001"
