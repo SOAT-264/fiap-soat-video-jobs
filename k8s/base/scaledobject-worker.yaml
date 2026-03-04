@@ -1,0 +1,22 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: job-worker-sqs-scaler
+  namespace: video-processor
+spec:
+  scaleTargetRef:
+    name: job-worker
+  pollingInterval: 15
+  cooldownPeriod: 60
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  triggers:
+    - type: aws-sqs-queue
+      authenticationRef:
+        name: job-worker-sqs-auth
+      metadata:
+        queueURLFromEnv: SQS_JOB_QUEUE_URL
+        queueLength: "5"
+        awsRegion: "us-east-1"
+        awsEndpoint: "http://localstack:4566"
+        scaleOnInFlight: "true"

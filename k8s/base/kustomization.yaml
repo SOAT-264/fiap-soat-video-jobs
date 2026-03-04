@@ -1,0 +1,11 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - configmap-app.yaml
+  - secret-app.yaml
+  - deployment-api.yaml
+  - service-api.yaml
+  - deployment-worker.yaml
+  - triggerauthentication-sqs.yaml
+  - scaledobject-worker.yaml

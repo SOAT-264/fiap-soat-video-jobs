@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: job-worker
+  namespace: video-processor
+  labels:
+    app: job-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: job-worker
+  template:
+    metadata:
+      labels:
+        app: job-worker
+    spec:
+      containers:
+        - name: job-worker
+          image: fiap-soat-video-jobs:local
+          imagePullPolicy: Never
+          command:
+            - python
+            - -m
+            - job_service.infrastructure.adapters.input.sqs_consumer
+          envFrom:
+            - configMapRef:
+                name: jobs-app-config
+            - secretRef:
+                name: jobs-app-secret
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"

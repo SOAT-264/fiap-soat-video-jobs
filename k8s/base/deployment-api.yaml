@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: job-api-service
+  namespace: video-processor
+  labels:
+    app: job-api-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: job-api-service
+  template:
+    metadata:
+      labels:
+        app: job-api-service
+    spec:
+      containers:
+        - name: job-api-service
+          image: fiap-soat-video-jobs:local
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: jobs-app-config
+            - secretRef:
+                name: jobs-app-secret
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

@@ -180,6 +180,16 @@ pytest tests/ -v --cov=job_service
 
 ---
 
+## ☸️ Kubernetes + HPA por SQS
+
+Os manifests de Kubernetes estão em `k8s/` e incluem autoscaling do `job-worker` via KEDA com base no tamanho da fila SQS.
+
+Guia de uso:
+
+- `k8s/README.md`
+
+---
+
 ## 📄 Licença
 
 MIT License
