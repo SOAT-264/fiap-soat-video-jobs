@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from video_processor_shared.domain.value_objects import JobStatus
 
 from job_service.infrastructure.adapters.input.worker import video_processor_task as task
 
@@ -120,3 +121,45 @@ async def test_process_video_task_raises_when_job_not_found(monkeypatch, tmp_pat
 
     with pytest.raises(ValueError):
         await task.process_video_task(str(uuid4()), "videos/in.mp4")
+
+
+@pytest.mark.asyncio
+async def test_process_video_task_skips_when_job_already_processing(monkeypatch, make_job, tmp_path):
+    job = make_job(status=JobStatus.PROCESSING)
+
+    class RepoStub:
+        def __init__(self, _session):
+            pass
+
+        async def find_by_id(self, _id):
+            return job
+
+        async def update(self, _job):
+            return _job
+
+    session = SessionStub()
+
+    @asynccontextmanager
+    async def session_ctx():
+        yield session
+
+    storage = AsyncMock()
+    processor = AsyncMock()
+    publisher = AsyncMock()
+
+    monkeypatch.setattr(task, "get_session_context", session_ctx)
+    monkeypatch.setattr(task, "SQLAlchemyJobRepository", RepoStub)
+    monkeypatch.setattr(task, "S3StorageAdapter", lambda: storage)
+    monkeypatch.setattr(task, "FFmpegVideoProcessor", lambda: processor)
+    monkeypatch.setattr(task, "EventPublisher", lambda *_args, **_kwargs: publisher)
+    monkeypatch.setattr(task, "get_redis", AsyncMock(return_value=None))
+    monkeypatch.setattr(task.tempfile, "mkdtemp", lambda: str(tmp_path / "work3"))
+
+    await task.process_video_task(str(job.id), "videos/in.mp4")
+
+    assert session.commit.await_count == 0
+    storage.download_file.assert_not_awaited()
+    storage.upload_file.assert_not_awaited()
+    publisher.publish_job_started.assert_not_awaited()
+    publisher.publish_job_completed.assert_not_awaited()
+    publisher.publish_job_failed.assert_not_awaited()

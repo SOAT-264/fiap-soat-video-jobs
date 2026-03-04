@@ -12,6 +12,8 @@ from job_service.infrastructure.adapters.output.video_processing import FFmpegVi
 from job_service.infrastructure.adapters.output.messaging import EventPublisher
 from job_service.infrastructure.adapters.output.cache import get_redis
 from job_service.infrastructure.config import get_settings
+from video_processor_shared.domain.exceptions import InvalidJobTransitionError
+from video_processor_shared.domain.value_objects import JobStatus
 
 settings = get_settings()
 
@@ -39,9 +41,19 @@ async def process_video_task(job_id: str, video_key: str) -> None:
             job = await repository.find_by_id(UUID(job_id))
             if not job:
                 raise ValueError(f"Job {job_id} not found")
+
+            if job.is_terminal:
+                return
+
+            if job.status == JobStatus.PROCESSING:
+                return
             
             # Start processing
-            job.start()
+            try:
+                job.start()
+            except InvalidJobTransitionError:
+                return
+
             await repository.update(job)
             await session.commit()
             
