@@ -10,5 +10,5 @@ data:
   PUBLIC_S3_ENDPOINT_URL: "http://aws.localhost"
   SQS_QUEUE_URL: "http://host.docker.internal:4566/000000000000/job-queue"
   SQS_JOB_QUEUE_URL: "http://host.docker.internal:4566/000000000000/job-queue"
-  AUTH_SERVICE_URL: "http://host.docker.internal:8001"
+  AUTH_SERVICE_URL: "http://host.docker.internal:32513"
   VIDEO_SERVICE_URL: "http://host.docker.internal:8002"
