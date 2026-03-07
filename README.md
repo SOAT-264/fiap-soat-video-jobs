@@ -7,9 +7,17 @@ Microserviço responsável pelo processamento assíncrono de vídeos. Ele possui
 - Explicação do projeto
 - Objetivo
 - Como funciona
+- Repositórios relacionados
 - Integrações com outros repositórios
 - Como executar
 - Como testar
+
+## Repositórios relacionados
+- [fiap-soat-video-service](https://github.com/SOAT-264/fiap-soat-video-service)
+- [fiap-soat-video-notifications](https://github.com/SOAT-264/fiap-soat-video-notifications)
+- [fiap-soat-video-shared](https://github.com/SOAT-264/fiap-soat-video-shared)
+- [fiap-soat-video-local-dev](https://github.com/SOAT-264/fiap-soat-video-local-dev)
+- [fiap-soat-video-obs](https://github.com/SOAT-264/fiap-soat-video-obs)
 
 ## Explicação do projeto
 O projeto combina duas partes:
