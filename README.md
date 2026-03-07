@@ -1,195 +1,91 @@
-# ⚙️ Video Processor - Job Service
+# fiap-soat-video-jobs
 
-[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-green.svg)](https://fastapi.tiangolo.com/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+## Introdução
+Microserviço responsável pelo processamento assíncrono de vídeos. Ele possui API para consulta de jobs e worker SQS para consumir eventos, extrair frames e publicar resultado do processamento.
 
-> Microserviço responsável pelo processamento de vídeos, extração de frames com FFmpeg e criação de arquivos ZIP.
+## Sumário
+- Explicação do projeto
+- Objetivo
+- Como funciona
+- Integrações com outros repositórios
+- Como executar
+- Como testar
 
-## 📋 Índice
+## Explicação do projeto
+O projeto combina duas partes:
+- API FastAPI para consultar jobs (`/jobs`).
+- Worker (`python -m job_service.infrastructure.adapters.input.sqs_consumer`) para consumir mensagens da fila e processar vídeos.
 
-- [Arquitetura](#-arquitetura)
-- [Processamento](#-processamento)
-- [API Endpoints](#-api-endpoints)
-- [Como Executar](#-como-executar)
-- [AWS Lambda](#-aws-lambda)
-- [Testes](#-testes)
+O processamento usa S3 para leitura/escrita de arquivos e publica eventos de estado (`job-events`) para continuidade do fluxo.
 
----
+## Objetivo
+Executar o processamento de vídeo de forma desacoplada da API de upload, com resiliência e escalabilidade orientadas à fila.
 
-## 🏗️ Arquitetura
+## Como funciona
+1. O worker consome mensagens da `job-queue` (SQS), incluindo mensagens encapsuladas por SNS.
+2. Para mensagens de upload (`video_id`, `user_id`, `filename`), o consumer cria um job pendente e resolve o `s3_key`.
+3. O `process_video_task` baixa o vídeo do S3, extrai frames (FFmpeg), gera zip e envia para `video-outputs`.
+4. O status do job é atualizado no banco e eventos de sucesso/falha são publicados em `job-events` (SNS).
+5. A API expõe consulta de jobs:
+`GET /jobs/{job_id}` e `GET /jobs`, com health em `GET /health` e prontidão em `GET /health/ready`.
+6. Em Kubernetes local-dev, o worker pode escalar com KEDA baseado no tamanho da fila.
 
-```
-src/job_service/
-├── domain/
-│   └── entities/job.py          # Entidade Job
-├── application/
-│   ├── ports/output/            # IJobRepository
-│   └── use_cases/               # CreateJob, ProcessVideo
-└── infrastructure/
-    ├── adapters/
-    │   ├── input/
-    │   │   ├── api/             # FastAPI routes
-    │   │   ├── worker/          # Celery tasks
-    │   │   └── sqs_consumer.py  # Lambda handler
-    │   └── output/
-    │       ├── persistence/     # SQLAlchemy
-    │       ├── storage/         # S3
-    │       ├── messaging/       # SNS
-    │       └── video_processing/ # FFmpeg
-    └── config/
-```
+## Integrações com outros repositórios
+| Repositório integrado | Como integra | Para que serve |
+| --- | --- | --- |
+| `fiap-soat-video-service` | Consome eventos originados de uploads (pipeline `video-events -> job-queue`) | Iniciar criação e processamento de jobs para vídeos enviados |
+| `fiap-soat-video-notifications` | Publica eventos `job-events` consumidos pelo worker de notificações | Disparar notificação ao usuário quando job termina/falha |
+| `fiap-soat-video-auth` | URL de auth parametrizada no ambiente integrado (`AUTH_SERVICE_URL`) | Manter contrato de identidade entre serviços no ecossistema |
+| `fiap-soat-video-shared` | Uso de eventos/exceções/value objects compartilhados (`JobCompletedEvent`, `JobFailedEvent`, `JobStatus`) | Padronizar semântica de domínio e contratos de mensagem |
+| `fiap-soat-video-local-dev` | Provisiona DB/Redis/LocalStack, deploy API+worker e filas SNS/SQS | Executar pipeline assíncrono completo localmente |
+| `fiap-soat-video-obs` | Exposição de `/health` e `/metrics` para scraping | Monitorar API e comportamento operacional do serviço |
 
----
-
-## 📹 Processamento
-
-### Fluxo
-
-```
-1. Recebe mensagem da fila SQS
-2. Baixa vídeo do S3
-3. Extrai frames com FFmpeg (1 frame/segundo)
-4. Cria arquivo ZIP com todos os frames
-5. Upload do ZIP para S3
-6. Publica evento no SNS (job_completed)
-7. Notification Service envia email
-```
-
-### FFmpeg Command
-
-```bash
-ffmpeg -i input.mp4 -vf fps=1 -q:v 2 frames_%04d.jpg
-```
-
----
-
-## 📡 API Endpoints
-
-| Método | Endpoint | Descrição | Autenticação |
-|--------|----------|-----------|--------------|
-| GET | `/jobs` | Listar jobs do usuário | ✅ JWT |
-| GET | `/jobs/{id}` | Status do job | ✅ JWT |
-| DELETE | `/jobs/{id}` | Cancelar job | ✅ JWT |
-| GET | `/health` | Health check | ❌ |
-
-### Exemplo de Resposta
-
-```json
-{
-  "id": "uuid",
-  "video_id": "uuid",
-  "status": "COMPLETED",
-  "progress": 100,
-  "frame_count": 120,
-  "output_url": "https://s3.../frames.zip",
-  "created_at": "2024-01-01T00:00:00Z",
-  "completed_at": "2024-01-01T00:02:00Z"
-}
-```
-
-### Status Possíveis
-
-| Status | Descrição |
-|--------|-----------|
-| `PENDING` | Aguardando processamento |
-| `PROCESSING` | Em processamento |
-| `COMPLETED` | Finalizado com sucesso |
-| `FAILED` | Erro no processamento |
-| `CANCELLED` | Cancelado pelo usuário |
-
----
-
-## 🚀 Como Executar
-
+## Como executar
 ### Pré-requisitos
-
 - Python 3.11+
-- FFmpeg instalado (`brew install ffmpeg`)
-- PostgreSQL, S3 (LocalStack)
+- FFmpeg disponível no ambiente local para processamento de vídeo
+- Infra local recomendada via `fiap-soat-video-local-dev`
 
-### 1. Clone e instale
+### Execução local da API
+```powershell
+cd /fiap-soat-video-jobs
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev,worker]"
 
-```bash
-git clone https://github.com/morgadope/fiap-soat-video-jobs.git
-cd fiap-soat-video-jobs
-pip install -e ".[dev]"
+$env:DATABASE_URL="postgresql+asyncpg://postgres:postgres123@localhost:5434/job_db"
+$env:REDIS_URL="redis://localhost:6379/2"
+$env:AWS_ENDPOINT_URL="http://localhost:4566"
+$env:AWS_ACCESS_KEY_ID="test"
+$env:AWS_SECRET_ACCESS_KEY="test"
+$env:AWS_DEFAULT_REGION="us-east-1"
+$env:S3_INPUT_BUCKET="video-uploads"
+$env:S3_OUTPUT_BUCKET="video-outputs"
+$env:SQS_JOB_QUEUE_URL="http://localhost:4566/000000000000/job-queue"
+$env:SNS_TOPIC_ARN="arn:aws:sns:us-east-1:000000000000:job-events"
+
+uvicorn job_service.infrastructure.adapters.input.api.main:app --host 0.0.0.0 --port 8003 --reload
 ```
 
-### 2. Configure
-
-```bash
-export DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:5434/job_db"
-export AWS_ENDPOINT_URL="http://localhost:4566"
-export S3_INPUT_BUCKET="video-uploads"
-export S3_OUTPUT_BUCKET="video-outputs"
-export SQS_JOB_QUEUE_URL="http://localhost:4566/000000000000/job-queue"
-```
-
-### 3. Execute API
-
-```bash
-uvicorn job_service.infrastructure.adapters.input.api.main:app --reload --port 8003
-```
-
-### 4. Execute Worker (outro terminal)
-
-```bash
+### Execução local do worker
+```powershell
+cd /fiap-soat-video-jobs
+.\.venv\Scripts\Activate.ps1
 python -m job_service.infrastructure.adapters.input.sqs_consumer
 ```
 
----
-
-## ☁️ AWS Lambda
-
-O serviço pode rodar como Lambda triggered por SQS:
-
-```python
-# sqs_consumer.py
-def lambda_handler(event, context):
-    for record in event["Records"]:
-        body = json.loads(record["body"])
-        process_video_task(body["job_id"], body["s3_key"])
+### Execução integrada (recomendada)
+```powershell
+cd /fiap-soat-video-local-dev
+.\start.ps1
 ```
 
-### Deploy Lambda
-
-1. Crie Lambda Layer com FFmpeg
-2. Configure trigger SQS
-3. Set timeout para 15 minutos (máximo)
-
----
-
-## 🐳 Docker
-
-```bash
-docker build -t job-service .
-docker run -p 8003:8003 \
-  -e DATABASE_URL="..." \
-  -e AWS_ENDPOINT_URL="..." \
-  job-service
+## Como testar
+```powershell
+cd /fiap-soat-video-jobs
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev,worker]"
+pytest
 ```
 
----
-
-## 🧪 Testes
-
-```bash
-pytest tests/ -v --cov=job_service
-```
-
----
-
-## ☸️ Kubernetes + HPA por SQS
-
-Os manifests de Kubernetes estão em `k8s/` e incluem autoscaling do `job-worker` via KEDA com base no tamanho da fila SQS.
-
-Guia de uso:
-
-- `k8s/README.md`
-
----
-
-## 📄 Licença
-
-MIT License
