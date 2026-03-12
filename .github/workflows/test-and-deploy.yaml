@@ -1,0 +1,129 @@
+name: Test and Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+    branches:
+      - main
+      - master
+      - develop
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests with coverage gate
+        run: python -m pytest
+
+  build-and-deploy:
+    needs: tests
+    if: github.event_name == 'push'
+    runs-on:
+      - self-hosted
+      - pc-wee
+      - X64
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: powershell
+
+    steps:
+      - name: Checkout jobs repository
+        uses: actions/checkout@v4
+        with:
+          path: fiap-soat-video-jobs
+
+      - name: Checkout shared repository
+        uses: actions/checkout@v4
+        with:
+          repository: SOAT-264/fiap-soat-video-shared
+          path: fiap-soat-video-shared
+
+      - name: Checkout local-dev repository
+        uses: actions/checkout@v4
+        with:
+          repository: SOAT-264/fiap-soat-video-local-dev
+          path: fiap-soat-video-local-dev
+
+      - name: Checkout observability repository
+        uses: actions/checkout@v4
+        with:
+          repository: SOAT-264/fiap-soat-video-obs
+          path: fiap-soat-video-obs
+
+      - name: Validate runner tooling
+        working-directory: ${{ github.workspace }}
+        run: |
+          $requiredCommands = @("docker", "git", "kubectl", "awslocal")
+
+          foreach ($command in $requiredCommands) {
+              if (-not (Get-Command $command -ErrorAction SilentlyContinue)) {
+                  throw "Command '$command' was not found on the runner."
+              }
+          }
+
+          docker version
+          docker compose version
+          kubectl version --client
+          kubectl cluster-info
+
+      - name: Start local base infrastructure
+        working-directory: ${{ github.workspace }}/fiap-soat-video-local-dev
+        run: docker compose up -d --remove-orphans
+
+      - name: Initialize LocalStack resources
+        working-directory: ${{ github.workspace }}/fiap-soat-video-local-dev/scripts/windows
+        run: .\localstack-init.ps1
+
+      - name: Ensure KEDA is installed
+        run: |
+          kubectl get crd scaledobjects.keda.sh *> $null
+
+          if ($LASTEXITCODE -ne 0) {
+              kubectl apply --server-side -f https://github.com/kedacore/keda/releases/download/v2.19.0/keda-2.19.0.yaml
+              kubectl rollout status deployment/keda-operator -n keda --timeout=180s
+          }
+
+      - name: Build local jobs image
+        working-directory: ${{ github.workspace }}
+        run: docker build -t fiap-soat-video-jobs:local -f fiap-soat-video-jobs/Dockerfile .
+
+      - name: Apply jobs local-dev manifests
+        working-directory: ${{ github.workspace }}/fiap-soat-video-jobs
+        run: |
+          kubectl apply -k k8s/overlays/local-dev
+          kubectl rollout restart deployment/job-api-service -n video-processor
+          kubectl rollout restart deployment/job-worker -n video-processor
+          kubectl rollout status deployment/job-api-service -n video-processor --timeout=180s
+          kubectl rollout status deployment/job-worker -n video-processor --timeout=180s
+
+      - name: Reload Traefik and Prometheus
+        working-directory: ${{ github.workspace }}/fiap-soat-video-local-dev
+        run: docker compose restart traefik prometheus
+
+      - name: Verify deployed jobs API health
+        run: |
+          $response = Invoke-WebRequest -Uri http://localhost:32514/health -UseBasicParsing
+
+          if ($response.StatusCode -ne 200) {
+              throw "Jobs API health check failed with status code $($response.StatusCode)."
+          }
