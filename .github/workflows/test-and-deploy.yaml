@@ -2,15 +2,7 @@ name: Test and Deploy
 
 on:
   push:
-    branches:
-      - main
-      - master
-      - develop
   pull_request:
-    branches:
-      - main
-      - master
-      - develop
 
 jobs:
   tests:
@@ -36,7 +28,7 @@ jobs:
 
   build-and-deploy:
     needs: tests
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on:
       - self-hosted
       - pc-wee
