@@ -1,6 +1,8 @@
 # fiap-soat-video-jobs
 
 ## Introdução
+> Este repositório faz parte do projeto [FIAP SOAT Video Processor](https://github.com/SOAT-264/fiap-soat-video-local-dev).
+
 Microserviço responsável pelo processamento assíncrono de vídeos. Ele possui API para consulta de jobs e worker SQS para consumir eventos, extrair frames e publicar resultado do processamento.
 
 ## Sumário
